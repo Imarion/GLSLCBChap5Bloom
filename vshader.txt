@@ -1,0 +1,23 @@
+#version 430
+
+layout (location = 0) in  vec3 VertexPosition;
+layout (location = 1) in  vec3 VertexNormal;
+layout (location = 2) in  vec2 VertexCoord;
+
+out vec4 Position;
+out vec3 Normal;
+out vec2 TexCoord;
+
+uniform mat4 ModelViewMatrix;
+uniform mat3 NormalMatrix;       // Model normal matrix
+uniform mat4 MVP;                // Projection * Modelview
+
+void main()
+{
+    // Convert normal and position to eye coords.
+    Normal        = normalize(NormalMatrix * VertexNormal);
+    Position      = ModelViewMatrix * vec4(VertexPosition, 1.0);
+    TexCoord      = VertexCoord;
+
+    gl_Position = MVP * vec4(VertexPosition, 1.0);
+}
