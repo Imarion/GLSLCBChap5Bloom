@@ -20,7 +20,7 @@ MyWindow::~MyWindow()
 }
 
 MyWindow::MyWindow()
-    : mProgram(0), currentTimeMs(0), currentTimeS(0), tPrev(0), angle(M_PI / 2.0f)
+    : mProgram(0), currentTimeMs(0), currentTimeS(0), tPrev(0), angle(M_PI / 2.0f), bloomBufWidth(this->width()/8), bloomBufHeight(this->height()/8)
 {
     setSurfaceType(QWindow::OpenGLSurface);
     setFlags(Qt::Window | Qt::WindowSystemMenuHint | Qt::WindowTitleHint | Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint);
@@ -77,9 +77,13 @@ void MyWindow::initialize()
     initShaders();
     pass1Index = mFuncs->glGetSubroutineIndex( mProgram->programId(), GL_FRAGMENT_SHADER, "pass1");
     pass2Index = mFuncs->glGetSubroutineIndex( mProgram->programId(), GL_FRAGMENT_SHADER, "pass2");
+    pass3Index = mFuncs->glGetSubroutineIndex( mProgram->programId(), GL_FRAGMENT_SHADER, "pass3");
+    pass4Index = mFuncs->glGetSubroutineIndex( mProgram->programId(), GL_FRAGMENT_SHADER, "pass4");
+    pass5Index = mFuncs->glGetSubroutineIndex( mProgram->programId(), GL_FRAGMENT_SHADER, "pass5");
 
     initMatrices();
     setupFBO();
+    setupSamplers();
 
     glFrontFace(GL_CCW);
     glEnable(GL_DEPTH_TEST);
@@ -312,17 +316,20 @@ void MyWindow::render()
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    glBindFramebuffer(GL_FRAMEBUFFER, mFBOHandle);
-    pass1();
 
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    pass1();
     pass2();
+    pass3();
+    pass4();
+    pass5();
 
     mContext->swapBuffers(this);
 }
 
 void MyWindow::pass1()
 {   
+    glBindFramebuffer(GL_FRAMEBUFFER, hdrFbo);
+
     glClearColor(0.5f,0.5f,0.5f,1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glEnable(GL_DEPTH_TEST);
@@ -461,11 +468,17 @@ void MyWindow::pass1()
 
 void MyWindow::pass2()
 {
-    glActiveTexture(GL_TEXTURE0);
-    //glBindTexture(GL_TEXTURE_2D, renderTex);
+    glViewport(0, 0, bloomBufWidth, bloomBufHeight);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, blurFbo);
+
+    // We're writing to tex1 this time
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex1, 0);
+
     glDisable(GL_DEPTH_TEST);
 
-    glClear(GL_COLOR_BUFFER_BIT| GL_DEPTH_BUFFER_BIT);
+    glClearColor(0,0,0,0);
+    glClear(GL_COLOR_BUFFER_BIT);
 
     mFuncs->glBindVertexArray(mVAOFSQuad);
 
@@ -477,7 +490,108 @@ void MyWindow::pass2()
     {
         mFuncs->glUniformSubroutinesuiv( GL_FRAGMENT_SHADER, 1, &pass2Index);
 
-        mProgram->setUniformValue( "AveLum", computeLogAveLuminance() );
+        QMatrix4x4 mv1 ,proj;
+
+        mProgram->setUniformValue("ModelViewMatrix", mv1);
+        mProgram->setUniformValue("NormalMatrix", mv1.normalMatrix());
+        mProgram->setUniformValue("MVP", proj * mv1);
+
+        // Render the full-screen quad
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+
+        glDisableVertexAttribArray(0);
+        glDisableVertexAttribArray(1);
+        glDisableVertexAttribArray(2);
+    }
+    mProgram->release();
+}
+
+void MyWindow::pass3()
+{
+    // We're writing to tex2 this time
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex2, 0);
+
+    mFuncs->glBindVertexArray(mVAOFSQuad);
+
+    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
+    glEnableVertexAttribArray(2);
+
+    mProgram->bind();
+    {
+        mFuncs->glUniformSubroutinesuiv( GL_FRAGMENT_SHADER, 1, &pass3Index);
+
+        QMatrix4x4 mv1 ,proj;
+
+        mProgram->setUniformValue("ModelViewMatrix", mv1);
+        mProgram->setUniformValue("NormalMatrix", mv1.normalMatrix());
+        mProgram->setUniformValue("MVP", proj * mv1);
+
+        // Render the full-screen quad
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+
+        glDisableVertexAttribArray(0);
+        glDisableVertexAttribArray(1);
+        glDisableVertexAttribArray(2);
+    }
+    mProgram->release();
+}
+
+void MyWindow::pass4()
+{
+
+    // We're writing to tex2 this time
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex1, 0);
+
+    mFuncs->glBindVertexArray(mVAOFSQuad);
+
+    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
+    glEnableVertexAttribArray(2);
+
+    mProgram->bind();
+    {
+        mFuncs->glUniformSubroutinesuiv( GL_FRAGMENT_SHADER, 1, &pass4Index);
+
+        QMatrix4x4 mv1 ,proj;
+
+        mProgram->setUniformValue("ModelViewMatrix", mv1);
+        mProgram->setUniformValue("NormalMatrix", mv1.normalMatrix());
+        mProgram->setUniformValue("MVP", proj * mv1);
+
+        // Render the full-screen quad
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+
+        glDisableVertexAttribArray(0);
+        glDisableVertexAttribArray(1);
+        glDisableVertexAttribArray(2);
+    }
+    mProgram->release();
+}
+
+
+void MyWindow::pass5()
+{
+    glBindFramebuffer(GL_FRAMEBUFFER,0);
+
+    glClear(GL_COLOR_BUFFER_BIT);
+    glViewport(0, 0, this->width(), this->height());
+
+    // In this pass, we're reading from tex1 (unit 1) and we want
+    // linear sampling to get an extra blur
+    mFuncs->glBindSampler(1, linearSampler);
+
+    mFuncs->glBindVertexArray(mVAOFSQuad);
+
+    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
+    glEnableVertexAttribArray(2);
+
+    mProgram->bind();
+    {
+        mFuncs->glUniformSubroutinesuiv( GL_FRAGMENT_SHADER, 1, &pass5Index);
+
+        mProgram->setUniformValue( "AveLum",    computeLogAveLuminance() );
         mProgram->setUniformValue( "DoToneMap", displayMode );
 
         QMatrix4x4 mv1 ,proj;
@@ -493,7 +607,10 @@ void MyWindow::pass2()
         glDisableVertexAttribArray(1);
         glDisableVertexAttribArray(2);
     }
-    mProgram->release();    
+    mProgram->release();
+
+    // Revert to nearest sampling
+    mFuncs->glBindSampler(1, nearestSampler);
 }
 
 void MyWindow::initShaders()
@@ -588,19 +705,17 @@ void MyWindow::printMatrix(const QMatrix4x4& mat)
 
 void MyWindow::setupFBO() {
     // Generate and bind the framebuffer
-    glGenFramebuffers(1, &mFBOHandle);
-    glBindFramebuffer(GL_FRAMEBUFFER, mFBOHandle);
+    glGenFramebuffers(1, &hdrFbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, hdrFbo);
 
     // Create the texture object    
-    glGenTextures(1, &renderTex);
+    glGenTextures(1, &hdrTex);
     glActiveTexture(GL_TEXTURE0);  // Use texture unit 0
-    glBindTexture(GL_TEXTURE_2D, renderTex);
+    glBindTexture(GL_TEXTURE_2D, hdrTex);
     mFuncs->glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGB32F, this->width(), this->height());
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
     // Bind the texture to the FBO
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderTex, 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, hdrTex, 0);
 
     // Create the depth buffer
     GLuint depthBuf;
@@ -613,18 +728,68 @@ void MyWindow::setupFBO() {
                               GL_RENDERBUFFER, depthBuf);
 
     // Set the targets for the fragment output variables
-    GLenum drawBuffers[] = {GL_NONE, GL_COLOR_ATTACHMENT0};
-    mFuncs->glDrawBuffers(2, drawBuffers);
+    GLenum drawBuffers[] = {GL_COLOR_ATTACHMENT0};
+    mFuncs->glDrawBuffers(1, drawBuffers);
+
+    // Create an FBO for the bright-pass filter and blur
+    glGenFramebuffers(1, &blurFbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, blurFbo);
+
+    // Create two texture objects to ping-pong for the bright-pass filter
+    // and the two-pass blur
+    glGenTextures(1, &tex1);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, tex1);
+    mFuncs->glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGB32F, bloomBufWidth, bloomBufHeight);
+
+    glActiveTexture(GL_TEXTURE2);
+    glGenTextures(1, &tex2);
+    glBindTexture(GL_TEXTURE_2D, tex2);
+    mFuncs->glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGB32F, bloomBufWidth, bloomBufHeight);
+
+    // Bind tex1 to the FBO
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex1, 0);
+
+    mFuncs->glDrawBuffers(1, drawBuffers);
 
     // Unbind the framebuffer, and revert to default framebuffer
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+void MyWindow::setupSamplers()
+{
+    // Set up two sampler objects for linear and nearest filtering
+    GLuint samplers[2];
+    mFuncs->glGenSamplers(2, samplers);
+    linearSampler  = samplers[0];
+    nearestSampler = samplers[1];
+
+    GLfloat border[] = {0.0f,0.0f,0.0f,0.0f};
+    // Set up the nearest sampler
+    mFuncs->glSamplerParameteri(nearestSampler, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    mFuncs->glSamplerParameteri(nearestSampler, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    mFuncs->glSamplerParameteri(nearestSampler, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    mFuncs->glSamplerParameteri(nearestSampler, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    mFuncs->glSamplerParameterfv(nearestSampler, GL_TEXTURE_BORDER_COLOR, border);
+
+    // Set up the linear sampler
+    mFuncs->glSamplerParameteri(linearSampler, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    mFuncs->glSamplerParameteri(linearSampler, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    mFuncs->glSamplerParameteri(linearSampler, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    mFuncs->glSamplerParameteri(linearSampler, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    mFuncs->glSamplerParameterfv(linearSampler, GL_TEXTURE_BORDER_COLOR, border);
+
+    // We want nearest sampling except for the last pass.
+    mFuncs->glBindSampler(0, nearestSampler);
+    mFuncs->glBindSampler(1, nearestSampler);
+    mFuncs->glBindSampler(2, nearestSampler);
 }
 
 float MyWindow::computeLogAveLuminance()
 {
     float *texData = new float[this->width()*this->height()*3];
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, renderTex);
+    glBindTexture(GL_TEXTURE_2D, hdrTex);
     glGetTexImage(GL_TEXTURE_2D, 0, GL_RGB, GL_FLOAT, texData);
     float sum = 0.0f;
     for( int i = 0; i < this->width() * this->height(); i++ )
