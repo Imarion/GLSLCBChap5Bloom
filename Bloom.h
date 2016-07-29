@@ -45,9 +45,13 @@ private:
     void CreateVertexBuffer();    
     void initMatrices();
     void setupFBO();
+    void setupSamplers();
 
     void pass1();
-    void pass2();    
+    void pass2();
+    void pass3();
+    void pass4();
+    void pass5();
 
     void PrepareTexture(GLenum TextureTarget, const QString& FileName, GLuint& TexObject, bool flip);
     float computeLogAveLuminance();
@@ -69,12 +73,15 @@ private:
 
     bool   displayMode = true; // with (true) or without effect (false)
 
-    GLuint mVAOTeapot, mVAOPlane, mVAOSphere, mVAOFSQuad, mVBO, mIBO, mFBOHandle, intermediateFBO;
+    GLuint mVAOTeapot, mVAOPlane, mVAOSphere, mVAOFSQuad, mVBO, mIBO, hdrFbo, blurFbo;
     GLuint mPositionBufferHandle, mColorBufferHandle;
     GLuint mRotationMatrixLocation;
 
-    GLuint pass1Index, pass2Index;
-    GLuint renderTex, intermediateTex;
+    GLuint pass1Index, pass2Index, pass3Index, pass4Index, pass5Index;
+    GLuint hdrTex, tex1, tex2;
+    GLuint bloomBufWidth, bloomBufHeight;
+    GLuint linearSampler, nearestSampler;
+
 
     Teapot    *mTeapot;
     VBOPlane  *mPlane;
