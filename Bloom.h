@@ -53,8 +53,11 @@ private:
     void pass4();
     void pass5();
 
-    void PrepareTexture(GLenum TextureTarget, const QString& FileName, GLuint& TexObject, bool flip);
+    void  PrepareTexture(GLenum TextureTarget, const QString& FileName, GLuint& TexObject, bool flip);
+
     float computeLogAveLuminance();
+    void  computeBlurWeights();
+    float gauss(float x, float sigma2 );
 
 protected:
     void resizeEvent(QResizeEvent *);
@@ -89,6 +92,8 @@ private:
 
     QMatrix4x4 ModelMatrixTeapot, ModelMatrixSphere, ViewMatrix, ProjectionMatrix;
     QMatrix4x4 ModelMatrixBackPlane, ModelMatrixBotPlane, ModelMatrixTopPlane;
+
+    float weights[10], sigma2; // for gaussian blur
 
     //debug
     void printMatrix(const QMatrix4x4& mat);

@@ -13,6 +13,7 @@
 
 #include <cmath>
 #include <cstring>
+#include <sstream>
 
 MyWindow::~MyWindow()
 {
@@ -20,7 +21,8 @@ MyWindow::~MyWindow()
 }
 
 MyWindow::MyWindow()
-    : mProgram(0), currentTimeMs(0), currentTimeS(0), tPrev(0), angle(M_PI / 2.0f), bloomBufWidth(this->width()/8), bloomBufHeight(this->height()/8)
+    : mProgram(0), currentTimeMs(0), currentTimeS(0), tPrev(0), angle(M_PI / 2.0f),
+      bloomBufWidth(this->width()/8), bloomBufHeight(this->height()/8), sigma2(25.0f)
 {
     setSurfaceType(QWindow::OpenGLSurface);
     setFlags(Qt::Window | Qt::WindowSystemMenuHint | Qt::WindowTitleHint | Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint);
@@ -84,6 +86,7 @@ void MyWindow::initialize()
     initMatrices();
     setupFBO();
     setupSamplers();
+    computeBlurWeights();
 
     glFrontFace(GL_CCW);
     glEnable(GL_DEPTH_TEST);
@@ -318,7 +321,7 @@ void MyWindow::render()
 
 
     pass1();
-    pass2();
+    pass2();    
     pass3();
     pass4();
     pass5();
@@ -343,14 +346,14 @@ void MyWindow::pass1()
     QVector4D worldLightl = QVector4D(0.0f-7.0f, 4.0f, 2.5f, 1.0f);
     QVector4D worldLightm = QVector4D(0.0f, 4.0f, 2.5f, 1.0f);
     QVector4D worldLightr = QVector4D(0.0f+7.0f, 4.0f, 2.5f, 1.0f);
-    QVector3D intense     = QVector3D(1.0f, 1.0f, 1.0f);
+    QVector3D intense     = QVector3D(0.6f, 0.6f, 0.6f);
 
     mProgram->bind();
     {
         mFuncs->glUniformSubroutinesuiv( GL_FRAGMENT_SHADER, 1, &pass1Index);
 
-        mProgram->setUniformValue("Lights[0].Position", ViewMatrix * worldLightl );
-        mProgram->setUniformValue("Lights[1].Position", ViewMatrix * worldLightm );
+        mProgram->setUniformValue("Lights[0].Position", ViewMatrix * worldLightl);
+        mProgram->setUniformValue("Lights[1].Position", ViewMatrix * worldLightm);
         mProgram->setUniformValue("Lights[2].Position", ViewMatrix * worldLightr);
 
         mProgram->setUniformValue("Lights[0].Intensity", intense );
@@ -386,8 +389,8 @@ void MyWindow::pass1()
     {
         mFuncs->glUniformSubroutinesuiv( GL_FRAGMENT_SHADER, 1, &pass1Index);
 
-        mProgram->setUniformValue("Lights[0].Position", ViewMatrix * worldLightl );
-        mProgram->setUniformValue("Lights[1].Position", ViewMatrix * worldLightm );
+        mProgram->setUniformValue("Lights[0].Position", ViewMatrix * worldLightl);
+        mProgram->setUniformValue("Lights[1].Position", ViewMatrix * worldLightm);
         mProgram->setUniformValue("Lights[2].Position", ViewMatrix * worldLightr);
 
         mProgram->setUniformValue("Lights[0].Intensity", intense );
@@ -490,6 +493,8 @@ void MyWindow::pass2()
     {
         mFuncs->glUniformSubroutinesuiv( GL_FRAGMENT_SHADER, 1, &pass2Index);
 
+        mProgram->setUniformValue("LumThresh", 1.7f);
+
         QMatrix4x4 mv1 ,proj;
 
         mProgram->setUniformValue("ModelViewMatrix", mv1);
@@ -521,6 +526,12 @@ void MyWindow::pass3()
     {
         mFuncs->glUniformSubroutinesuiv( GL_FRAGMENT_SHADER, 1, &pass3Index);
 
+        for (int i = 0; i < 10; i++ ) {
+            std::stringstream uniName;
+            uniName << "Weight[" << i << "]";
+            mProgram->setUniformValue(uniName.str().c_str(), weights[i]);
+        }
+
         QMatrix4x4 mv1 ,proj;
 
         mProgram->setUniformValue("ModelViewMatrix", mv1);
@@ -540,7 +551,7 @@ void MyWindow::pass3()
 void MyWindow::pass4()
 {
 
-    // We're writing to tex2 this time
+    // We're writing to tex1 this time
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex1, 0);
 
     mFuncs->glBindVertexArray(mVAOFSQuad);
@@ -552,6 +563,12 @@ void MyWindow::pass4()
     mProgram->bind();
     {
         mFuncs->glUniformSubroutinesuiv( GL_FRAGMENT_SHADER, 1, &pass4Index);
+
+        for (int i = 0; i < 10; i++ ) {
+            std::stringstream uniName;
+            uniName << "Weight[" << i << "]";
+            mProgram->setUniformValue(uniName.str().c_str(), weights[i]);
+        }
 
         QMatrix4x4 mv1 ,proj;
 
@@ -805,4 +822,30 @@ float MyWindow::computeLogAveLuminance()
     //qDebug() << "Ave luminance: " << expf(sum / (this->width()*this->height()));
 
     return expf(sum / (this->width()*this->height()));
+}
+
+void MyWindow::computeBlurWeights()
+{
+    float sum;
+
+    // Compute and sum the weights
+    weights[0] = gauss(0, sigma2);
+    sum = weights[0];
+    for( int i = 1; i < 10; i++ ) {
+        weights[i] = gauss(float(i), sigma2);
+        sum += 2 * weights[i];
+    }
+
+    // Normalize the weights and set the uniform
+    for( int i = 0; i < 10; i++ ) {
+        weights[i] /= sum;
+    }
+}
+
+float MyWindow::gauss(float x, float sigma2 )
+{
+    double coeff = 1.0 / (TwoPI * sigma2);
+    double expon = -(x * x) / (2.0 * sigma2);
+
+    return (float) (coeff * std::exp(expon));
 }
