@@ -21,8 +21,7 @@ MyWindow::~MyWindow()
 }
 
 MyWindow::MyWindow()
-    : mProgram(0), currentTimeMs(0), currentTimeS(0), tPrev(0), angle(M_PI / 2.0f),
-      bloomBufWidth(this->width()/8), bloomBufHeight(this->height()/8), sigma2(25.0f)
+    : mProgram(0), currentTimeMs(0), currentTimeS(0), tPrev(0), angle(M_PI / 2.0f), sigma2(25.0f)
 {
     setSurfaceType(QWindow::OpenGLSurface);
     setFlags(Qt::Window | Qt::WindowSystemMenuHint | Qt::WindowTitleHint | Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint);
@@ -37,6 +36,9 @@ MyWindow::MyWindow()
     create();
 
     resize(800, 600);
+
+    bloomBufWidth  = this->width()/8;
+    bloomBufHeight = this->height()/8;
 
     mContext = new QOpenGLContext(this);
     mContext->setFormat(format);
@@ -321,7 +323,7 @@ void MyWindow::render()
 
 
     pass1();
-    pass2();    
+    pass2();
     pass3();
     pass4();
     pass5();
@@ -470,14 +472,14 @@ void MyWindow::pass1()
 }
 
 void MyWindow::pass2()
-{
-    glViewport(0, 0, bloomBufWidth, bloomBufHeight);
+{    
 
     glBindFramebuffer(GL_FRAMEBUFFER, blurFbo);
 
     // We're writing to tex1 this time
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex1, 0);
 
+    glViewport(0, 0, bloomBufWidth, bloomBufHeight);
     glDisable(GL_DEPTH_TEST);
 
     glClearColor(0,0,0,0);
@@ -591,6 +593,7 @@ void MyWindow::pass5()
 {
     glBindFramebuffer(GL_FRAMEBUFFER,0);
 
+    //glClearColor(0,0,0,0);
     glClear(GL_COLOR_BUFFER_BIT);
     glViewport(0, 0, this->width(), this->height());
 
@@ -748,6 +751,43 @@ void MyWindow::setupFBO() {
     GLenum drawBuffers[] = {GL_COLOR_ATTACHMENT0};
     mFuncs->glDrawBuffers(1, drawBuffers);
 
+    GLenum error = mFuncs->glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (error != GL_FRAMEBUFFER_COMPLETE) {
+        qDebug() << "hdrfbo incomplete " << error;
+        switch (error) {
+            case GL_FRAMEBUFFER_UNDEFINED: // is returned if the specified framebuffer is the default read or draw framebuffer, but the default framebuffer does not exist.
+                qDebug() << "GL_FRAMEBUFFER_UNDEFINED";
+                break;
+            case GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT: // is returned if any of the framebuffer attachment points are framebuffer incomplete.
+                qDebug() << "GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT";
+                break;
+            case GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT: // is returned if the framebuffer does not have at least one image attached to it.
+                qDebug() << "GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT";
+                break;
+            case GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER:  // is returned if the value of GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE is GL_NONE for any color attachment point(s) named by GL_DRAW_BUFFERi.
+                qDebug() << "GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER";
+                break;
+            case GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER: // is returned if GL_READ_BUFFER is not GL_NONE and the value of GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE is GL_NONE for the color attachment point named by GL_READ_BUFFER.
+                qDebug() << "GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER";
+                break;
+            case GL_FRAMEBUFFER_UNSUPPORTED: // is returned if the combination of internal formats of the attached images violates an implementation-dependent set of restrictions.
+                qDebug() << "GL_FRAMEBUFFER_UNSUPPORTED";
+                break;
+            case GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE: // is returned if the value of GL_RENDERBUFFER_SAMPLES is not the same for all attached renderbuffers; if the value of GL_TEXTURE_SAMPLES is the not same for all attached textures; or, if the attached images are a mix of renderbuffers and textures, the value of GL_RENDERBUFFER_SAMPLES does not match the value of GL_TEXTURE_SAMPLES.
+                qDebug() << "GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE"; // is also returned if the value of GL_TEXTURE_FIXED_SAMPLE_LOCATIONS is not the same for all attached textures; or, if the attached images are a mix of renderbuffers and textures, the value of GL_TEXTURE_FIXED_SAMPLE_LOCATIONS is not GL_TRUE for all attached textures.
+                break;
+            case GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS: // is returned if any framebuffer attachment is layered, and any populated attachment is not layered, or if all populated color attachments are not from textures of the same target.
+                qDebug() << "GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS";
+                break;
+            case GL_INVALID_ENUM: // is returned if any framebuffer attachment is layered, and any populated attachment is not layered, or if all populated color attachments are not from textures of the same target.
+                qDebug() << "GL_INVALID_ENUM";
+                break;
+            case GL_INVALID_OPERATION: // is returned if any framebuffer attachment is layered, and any populated attachment is not layered, or if all populated color attachments are not from textures of the same target.
+                qDebug() << "GL_INVALID_OPERATION";
+                break;
+        }
+    }
+
     // Create an FBO for the bright-pass filter and blur
     glGenFramebuffers(1, &blurFbo);
     glBindFramebuffer(GL_FRAMEBUFFER, blurFbo);
@@ -759,13 +799,51 @@ void MyWindow::setupFBO() {
     glBindTexture(GL_TEXTURE_2D, tex1);
     mFuncs->glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGB32F, bloomBufWidth, bloomBufHeight);
 
-    glActiveTexture(GL_TEXTURE2);
     glGenTextures(1, &tex2);
+    glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, tex2);
     mFuncs->glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGB32F, bloomBufWidth, bloomBufHeight);
 
     // Bind tex1 to the FBO
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex1, 0);
+
+    error = mFuncs->glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (error != GL_FRAMEBUFFER_COMPLETE) {
+        qDebug() << "blurfbo incomplete " << error;
+        switch (error) {
+            case GL_FRAMEBUFFER_UNDEFINED: // is returned if the specified framebuffer is the default read or draw framebuffer, but the default framebuffer does not exist.
+                qDebug() << "GL_FRAMEBUFFER_UNDEFINED";
+                break;
+            case GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT: // is returned if any of the framebuffer attachment points are framebuffer incomplete.
+                qDebug() << "GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT";
+                break;
+            case GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT: // is returned if the framebuffer does not have at least one image attached to it.
+                qDebug() << "GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT";
+                break;
+            case GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER:  // is returned if the value of GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE is GL_NONE for any color attachment point(s) named by GL_DRAW_BUFFERi.
+                qDebug() << "GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER";
+                break;
+            case GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER: // is returned if GL_READ_BUFFER is not GL_NONE and the value of GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE is GL_NONE for the color attachment point named by GL_READ_BUFFER.
+                qDebug() << "GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER";
+                break;
+            case GL_FRAMEBUFFER_UNSUPPORTED: // is returned if the combination of internal formats of the attached images violates an implementation-dependent set of restrictions.
+                qDebug() << "GL_FRAMEBUFFER_UNSUPPORTED";
+                break;
+            case GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE: // is returned if the value of GL_RENDERBUFFER_SAMPLES is not the same for all attached renderbuffers; if the value of GL_TEXTURE_SAMPLES is the not same for all attached textures; or, if the attached images are a mix of renderbuffers and textures, the value of GL_RENDERBUFFER_SAMPLES does not match the value of GL_TEXTURE_SAMPLES.
+                qDebug() << "GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE"; // is also returned if the value of GL_TEXTURE_FIXED_SAMPLE_LOCATIONS is not the same for all attached textures; or, if the attached images are a mix of renderbuffers and textures, the value of GL_TEXTURE_FIXED_SAMPLE_LOCATIONS is not GL_TRUE for all attached textures.
+                break;
+            case GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS: // is returned if any framebuffer attachment is layered, and any populated attachment is not layered, or if all populated color attachments are not from textures of the same target.
+                qDebug() << "GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS";
+                break;
+            case GL_INVALID_ENUM: // is returned if any framebuffer attachment is layered, and any populated attachment is not layered, or if all populated color attachments are not from textures of the same target.
+                qDebug() << "GL_INVALID_ENUM";
+                break;
+            case GL_INVALID_OPERATION: // is returned if any framebuffer attachment is layered, and any populated attachment is not layered, or if all populated color attachments are not from textures of the same target.
+                qDebug() << "GL_INVALID_OPERATION";
+                break;
+        }
+    }
+
 
     mFuncs->glDrawBuffers(1, drawBuffers);
 

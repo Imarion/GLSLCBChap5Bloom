@@ -37,7 +37,7 @@ uniform mat3 xyz2rgb = mat3(
   -0.4985314, 0.0415560, 1.0572252 );
 
 uniform float Weight[10];
-uniform float PixOffsets[10] = float[](0.0,1.0,2.0,3.0,4.0,5.0,6.0,7.0,8.0,9.0);
+uniform int   PixOffsets[10] = int[](0,1,2,3,4,5,6,7,8,9);
 
 uniform float Exposure  = 0.35;
 uniform float White     = 0.928;
@@ -105,7 +105,7 @@ vec4 pass1() {
 subroutine( RenderPassType )
 vec4 pass2()
 {
-    vec4 val = texture(HdrTex, TexCoord);
+    vec4 val = texture(HdrTex, TexCoord);    
     if( luminance(val.rgb) > LumThresh )
         return val;
     else
@@ -125,6 +125,7 @@ vec4 pass3()
          sum += texture( BlurTex1, TexCoord - vec2(0.0,PixOffsets[i]) * dy ) * Weight[i];
     }
     return sum;
+    //return texture(BlurTex1, TexCoord);
 }
 
 // Second blur (read from BlurTex2, write to BlurTex1)
@@ -139,7 +140,7 @@ vec4 pass4()
        sum += texture( BlurTex2, TexCoord + vec2(PixOffsets[i],0.0) * dx ) * Weight[i];
        sum += texture( BlurTex2, TexCoord - vec2(PixOffsets[i],0.0) * dx ) * Weight[i];
     }
-    return sum ;
+    return sum;
 }
 
 subroutine (RenderPassType)
@@ -179,8 +180,8 @@ vec4 pass5() {
     }
     else
     {
-        return texture( BlurTex1, TexCoord );
-        //return texture( HdrTex, TexCoord );
+        //return texture( BlurTex2, TexCoord );
+        return texture( HdrTex, TexCoord );
     }
 }
 
