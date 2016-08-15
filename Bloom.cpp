@@ -21,7 +21,7 @@ MyWindow::~MyWindow()
 }
 
 MyWindow::MyWindow()
-    : mProgram(0), currentTimeMs(0), currentTimeS(0), tPrev(0), angle(M_PI / 2.0f), sigma2(25.0f)
+    : mProgram(0), currentTimeMs(0), currentTimeS(0), tPrev(0), angle(M_PI / 2.0f), sigma2(25.0f), aveLum(0)
 {
     setSurfaceType(QWindow::OpenGLSurface);
     setFlags(Qt::Window | Qt::WindowSystemMenuHint | Qt::WindowTitleHint | Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint);
@@ -323,6 +323,8 @@ void MyWindow::render()
 
 
     pass1();
+    aveLum = computeLogAveLuminance();
+    //qDebug() << "average luminance: " << aveLum;
     pass2();
     pass3();
     pass4();
@@ -333,9 +335,10 @@ void MyWindow::render()
 
 void MyWindow::pass1()
 {   
+    glViewport(0, 0, this->width(), this->height());
     glBindFramebuffer(GL_FRAMEBUFFER, hdrFbo);
 
-    glClearColor(0.5f,0.5f,0.5f,1.0f);
+    glClearColor(0.5f,0.5f,0.5f,1.0f);    
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glEnable(GL_DEPTH_TEST);
 
@@ -348,7 +351,7 @@ void MyWindow::pass1()
     QVector4D worldLightl = QVector4D(0.0f-7.0f, 4.0f, 2.5f, 1.0f);
     QVector4D worldLightm = QVector4D(0.0f, 4.0f, 2.5f, 1.0f);
     QVector4D worldLightr = QVector4D(0.0f+7.0f, 4.0f, 2.5f, 1.0f);
-    QVector3D intense     = QVector3D(0.6f, 0.6f, 0.6f);
+    QVector3D intense     = QVector3D(1.0f, 1.0f, 1.0f);
 
     mProgram->bind();
     {
@@ -611,7 +614,7 @@ void MyWindow::pass5()
     {
         mFuncs->glUniformSubroutinesuiv( GL_FRAGMENT_SHADER, 1, &pass5Index);
 
-        mProgram->setUniformValue( "AveLum",    computeLogAveLuminance() );
+        mProgram->setUniformValue( "AveLum",    aveLum );
         mProgram->setUniformValue( "DoToneMap", displayMode );
 
         QMatrix4x4 mv1 ,proj;
@@ -885,7 +888,7 @@ float MyWindow::computeLogAveLuminance()
     float *texData = new float[this->width()*this->height()*3];
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, hdrTex);
-    glGetTexImage(GL_TEXTURE_2D, 0, GL_RGB, GL_FLOAT, texData);
+    mFuncs->glGetTexImage(GL_TEXTURE_2D, 0, GL_RGB, GL_FLOAT, texData);
     float sum = 0.0f;
     for( int i = 0; i < this->width() * this->height(); i++ )
     {
@@ -916,7 +919,7 @@ void MyWindow::computeBlurWeights()
 
     // Normalize the weights and set the uniform
     for( int i = 0; i < 10; i++ ) {
-        weights[i] /= sum;
+        weights[i] /= sum;        
     }
 }
 

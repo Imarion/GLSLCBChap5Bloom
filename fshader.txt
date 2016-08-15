@@ -50,7 +50,6 @@ float luminance( vec3 color ) {
 }
 
 layout (location = 0) out vec4 FragColor;
-layout (location = 1) out vec3 HdrColor;
 
 /*
 vec3 phongModel ( vec4 position, vec3 normal ) {
@@ -97,8 +96,7 @@ vec3 ads( vec3 pos, vec3 norm )
 
 subroutine (RenderPassType)
 vec4 pass1() {
-    return vec4(ads(vec3(Position), Normal),1.0);
-    //return vec4 (1.0, 0.0, 0.0, 1.0);
+    return vec4(ads(vec3(Position), Normal),1.0);    
 }
 
 // Bright-pass filter (write to BlurTex1)
@@ -107,9 +105,13 @@ vec4 pass2()
 {
     vec4 val = texture(HdrTex, TexCoord);    
     if( luminance(val.rgb) > LumThresh )
+    {
         return val;
+    }
     else
+    {
         return vec4(0.0);
+    }
 }
 
 // First blur pass (read from BlurTex1, write to BlurTex2)
@@ -124,8 +126,7 @@ vec4 pass3()
          sum += texture( BlurTex1, TexCoord + vec2(0.0,PixOffsets[i]) * dy ) * Weight[i];
          sum += texture( BlurTex1, TexCoord - vec2(0.0,PixOffsets[i]) * dy ) * Weight[i];
     }
-    return sum;
-    //return texture(BlurTex1, TexCoord);
+    return sum;    
 }
 
 // Second blur (read from BlurTex2, write to BlurTex1)
@@ -146,47 +147,46 @@ vec4 pass4()
 subroutine (RenderPassType)
 vec4 pass5() {
 
+    // Retrieve high-res color from texture
+    vec4 color = texture( HdrTex, TexCoord );
+
+    // Convert to XYZ
+    vec3 xyzCol = rgb2xyz * vec3(color);
+
+    // Convert to xyY
+    float xyzSum = xyzCol.x + xyzCol.y + xyzCol.z;
+    vec3 xyYCol = vec3( xyzCol.x / xyzSum, xyzCol.y / xyzSum, xyzCol.y);
+
+    // Apply the tone mapping operation to the luminance (xyYCol.z or xyzCol.y)
+    float L = (Exposure * xyYCol.z) / AveLum;
+    L = (L * ( 1 + L / (White * White) )) / ( 1 + L );
+
+    // Using the new luminance, convert back to XYZ
+    xyzCol.x = (L * xyYCol.x) / (xyYCol.y);
+    xyzCol.y = L;
+    xyzCol.z = (L * (1 - xyYCol.x - xyYCol.y))/xyYCol.y;
+
+    // Convert back to RGB and send to output buffer
+    vec4 toneMapColor = vec4( xyz2rgb * xyzCol, 1.0);
+
     if (DoToneMap)
     {
-        // Retrieve high-res color from texture
-        vec4 color = texture( HdrTex, TexCoord );
-
-        // Convert to XYZ
-        vec3 xyzCol = rgb2xyz * vec3(color);
-
-        // Convert to xyY
-        float xyzSum = xyzCol.x + xyzCol.y + xyzCol.z;
-        vec3 xyYCol = vec3( xyzCol.x / xyzSum, xyzCol.y / xyzSum, xyzCol.y);
-
-        // Apply the tone mapping operation to the luminance (xyYCol.z or xyzCol.y)
-        float L = (Exposure * xyYCol.z) / AveLum;
-        L = (L * ( 1 + L / (White * White) )) / ( 1 + L );
-
-        // Using the new luminance, convert back to XYZ
-        xyzCol.x = (L * xyYCol.x) / (xyYCol.y);
-        xyzCol.y = L;
-        xyzCol.z = (L * (1 - xyYCol.x - xyYCol.y))/xyYCol.y;
-
-        // Convert back to RGB and send to output buffer
-        vec4 toneMapColor = vec4( xyz2rgb * xyzCol, 1.0);
-
         ///////////// Combine with blurred texture /////////////
         // We want linear filtering on this texture access so that
         // we get additional blurring.
         vec4 blurTex = texture(BlurTex1, TexCoord);
 
         return toneMapColor + blurTex;
-
     }
     else
     {
-        //return texture( BlurTex2, TexCoord );
-        return texture( HdrTex, TexCoord );
+        //return texture( BlurTex1, TexCoord );
+        //return texture( HdrTex, TexCoord );
+        return toneMapColor;
     }
 }
 
 void main()
 {    
-    FragColor = RenderPass();
-    //FragColor = vec4 (1.0, 0.0, 0.0, 0.0);
+    FragColor = RenderPass();    
 }

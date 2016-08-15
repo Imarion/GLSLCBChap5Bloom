@@ -94,6 +94,7 @@ private:
     QMatrix4x4 ModelMatrixBackPlane, ModelMatrixBotPlane, ModelMatrixTopPlane;
 
     float weights[10], sigma2; // for gaussian blur
+    float aveLum;
 
     //debug
     void printMatrix(const QMatrix4x4& mat);
